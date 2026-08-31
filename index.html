@@ -1016,6 +1016,11 @@ $('#btn-run').onclick = () => {
   const students = NEISCheck.mergeStudents(lists);
   const settingFile = state.files.find(f => f.kind === 'setting');
   state.setting = settingFile ? NEISCheck.parseSetting(settingFile.sheets) : null;
+    if (state.setting && state.setting.ok) {
+    try { localStorage.setItem('neisSetting', JSON.stringify({ when: Date.now(), data: state.setting })); } catch (e) {}
+  } else if (!state.setting) {
+    try { const sv = JSON.parse(localStorage.getItem('neisSetting')); if (sv && sv.data && sv.data.ok) state.setting = sv.data; } catch (e) {}
+  }
   state.students = students;
   if (!students.length) { $('#drop-msg').textContent = '학생 데이터를 찾지 못했습니다. NEIS에서 내려받은 원본 파일인지 확인해 주세요.'; return; }
   state.res = NEISCheck.runChecks(students, state.setting);
@@ -1024,6 +1029,17 @@ $('#btn-run').onclick = () => {
   renderMain();
 };
 $('#btn-reset').onclick = () => location.reload();
+try {
+  const sv = JSON.parse(localStorage.getItem('neisSetting'));
+  if (sv && sv.data && sv.data.ok) {
+    const d = new Date(sv.when);
+    const div = document.createElement('div');
+    div.style.cssText = 'margin-top:12px;font-size:13px;color:var(--sub)';
+    div.innerHTML = `💾 저장된 세팅데이터가 있어 세특 파일만 올려도 자동 적용됩니다 (${d.getMonth() + 1}월 ${d.getDate()}일 저장) <button id="del-setting" style="border:1px solid var(--line);background:none;border-radius:6px;padding:2px 8px;margin-left:6px;cursor:pointer;color:var(--faint)">삭제</button>`;
+    $('#file-list').before(div);
+    $('#del-setting').onclick = () => { localStorage.removeItem('neisSetting'); div.remove(); };
+  }
+} catch (e) {}
 
 /* ---------- 메인 렌더 ---------- */
 function classesOf() { return [...new Set(state.students.map(s => s.classCode).filter(Boolean))].sort(); }
