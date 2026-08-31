@@ -756,6 +756,14 @@ const NEISCheck = (() => {
   /* ---------- 검사 실행 ---------- */
   function runChecks(students, setting) {
     const res = { forbidden: [], length: [], style: [], similarity: [], missing: null, students };
+        if (setting && setting.ok && setting.teachers.length) {
+      for (const st of students) for (const en of st.entries) {
+        if (en.type === '교과' && en.subject && st.grade != null) {
+          const hits = setting.teachers.filter(t => t.grade === st.grade && t.norm === normSubject(en.subject) && (!st.classCode || t.classes.includes(st.classCode)));
+          if (hits.length) en.teacher = [...new Set(hits.map(h => h.teacher))].join(', ');
+        }
+      }
+    }
 
     // 1) 기재금지 / 2) 분량 / 3) 문체
     for (const st of students) {
@@ -1020,6 +1028,7 @@ $('#btn-reset').onclick = () => location.reload();
 /* ---------- 메인 렌더 ---------- */
 function classesOf() { return [...new Set(state.students.map(s => s.classCode).filter(Boolean))].sort(); }
 function fmtClass(cc) { return cc ? `${cc[0]}학년 ${+cc.slice(1)}반` : '반 미상'; }
+function tch(en) { return en && en.teacher ? `<span class="subj" style="color:var(--faint)">· ${esc(en.teacher)} 선생님</span>` : ''; }
 function stuLabel(st) { return `${st.num}번 ${st.name}`; }
 
 function renderMain() {
@@ -1115,7 +1124,7 @@ function renderForbidden() {
         <span class="pill ${f.rule.grade === '금지' ? 'danger' : 'warn'}">${f.rule.grade}</span>
         <span class="pill info">${esc(f.rule.label)}</span>
         <span class="who">${fmtClass(f.st.classCode)} ${stuLabel(f.st)}</span>
-        <span class="subj">${esc(f.entry.label)}</span>
+        <span class="subj">${esc(f.entry.label)}</span>${tch(f.entry)}
       </div>
       <div class="issue-body">
         <div class="ctx">${esc(f.context).replace(esc(f.match), `<mark>${esc(f.match)}</mark>`)}</div>
@@ -1135,7 +1144,7 @@ function renderLength() {
       <div class="issue-head">
         <span class="pill ${l.kind === 'over' ? 'danger' : 'warn'}">${l.kind === 'over' ? '상한 초과' : '분량 부족'}</span>
         <span class="who">${fmtClass(l.st.classCode)} ${stuLabel(l.st)}</span>
-        <span class="subj">${esc(l.entry.label)}</span>
+        <span class="subj">${esc(l.entry.label)}</span>${tch(l.entry)}
       </div>
       <div class="issue-body">현재 <b>${l.entry.bytes.toLocaleString()}B</b> (기준 ${l.kind === 'over' ? '≤' : '≥'}${(l.kind === 'over' ? l.cap : L.minBytes).toLocaleString()}B) — ${l.kind === 'over' ? `<b>${l.diff.toLocaleString()}B 초과</b>. NEIS 입력 시 잘릴 수 있으니 줄여야 합니다.` : `<b>${l.diff.toLocaleString()}B 부족</b>. 활동 내용을 보강해 주세요.`}</div>
     </div>`).join('');
@@ -1149,7 +1158,7 @@ function renderStyle() {
       <div class="issue-head">
         <span class="pill warn">${s.kind === 'repeat' ? '표현 반복' : '클리셰'}</span>
         <span class="who">${fmtClass(s.st.classCode)} ${stuLabel(s.st)}</span>
-        <span class="subj">${esc(s.entry.label)}</span>
+        <span class="subj">${esc(s.entry.label)}</span>${tch(s.entry)}
       </div>
       <div class="issue-body">'<b>${esc(s.word)}</b>' ${s.kind === 'repeat' ? `표현이 한 과목 안에서 ${s.count}회 사용됨 — 다른 표현으로 다듬어 주세요.` : `사용 (${s.count}회) — 상투적 표현이라 구체적 사실 중심 서술이 좋습니다.`}</div>
     </div>`).join('');
@@ -1163,7 +1172,7 @@ function renderSim() {
     <div class="issue sim-row" data-i="${i}">
       <div class="issue-head">
         <span class="pill ${s.grade === '위험' ? 'danger' : 'warn'}">${s.grade}</span>
-        <span class="subj">${esc(s.subject)}</span>
+        <span class="subj">${esc(s.subject)}</span>${tch(s.a.entry)}
         <span class="who">${stuLabel(s.a.st)} ↔ ${stuLabel(s.b.st)}</span>
         <span class="sim-score ${s.grade === '위험' ? 'hot' : 'mid'}" style="margin-left:auto">${(s.sim * 100).toFixed(0)}%</span>
       </div>
@@ -1265,7 +1274,7 @@ function drawStudent(st, iss) {
       eIss.push(`<div class="ei ${x.grade === '위험' ? 'r' : 'w'}"><b>[유사도 ${x.grade}]</b> ${esc(stuLabel(other))}와 ${(x.sim * 100).toFixed(0)}% 유사 — 유사도 탭에서 비교</div>`);
     }
     return `<div class="entry-card">
-      <div class="entry-head"><h3>${en.type && en.type !== '교과' ? `<span class="pill info" style="margin-right:6px">${en.type}</span>` : ''}${esc(en.label)}</h3>
+      <div class="entry-head"><h3>${en.type && en.type !== '교과' ? `<span class="pill info" style="margin-right:6px">${en.type}</span>` : ''}${esc(en.label)}</h3>${tch(en)}
         <div class="byte-wrap"><div class="byte-bar"><i class="${cls}" style="width:${pct}%"></i></div><span class="byte-num">${en.bytes.toLocaleString()} / ${cap.toLocaleString()}B</span></div>
       </div>
       ${eIss.length ? `<div class="entry-issues">${eIss.join('')}</div>` : ''}
