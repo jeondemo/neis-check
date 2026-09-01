@@ -49,7 +49,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
   button { font: inherit; cursor: pointer; }
   .wrap { max-width: 1080px; margin: 0 auto; padding: 24px 20px 80px; }
 
-    /* ===== 시작 화면 (버건디 표지) ===== */
+  /* ===== 시작 화면 (버건디 표지) ===== */
   #screen-drop { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; padding: 44px 20px; background: linear-gradient(165deg, #4e1119 0%, #6d1b26 52%, #57141d 100%); position: relative; overflow: hidden; }
   #screen-drop::before { content: ''; position: absolute; inset: 14px; border: 1px solid rgba(214,178,120,.35); pointer-events: none; }
   #screen-drop::after { content: ''; position: absolute; left: 50%; top: -180px; width: 560px; height: 560px; transform: translateX(-50%); border-radius: 50%; background: radial-gradient(circle, rgba(255,215,160,.10), transparent 65%); pointer-events: none; }
@@ -75,6 +75,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
   .tag.changche { background: #f0e2d2; color: #5a3d20; }
   .tag.haengteuk { background: #f0e2d2; color: #8c5a18; }
   .tag.setting { background: #e4ecdf; color: #3e5c34; }
+  .tag.roster { background: #e4ecdf; color: #2f5d5a; }
   .tag.unknown { background: #f4d9d9; color: #a13030; }
   .file-row .fname { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #4a3f3a; }
   .file-row .fmeta { color: #a89a90; font-size: 12px; }
@@ -242,7 +243,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
     <div class="panel" id="panel-forbidden"></div>
     <div class="panel" id="panel-length"></div>
     <div class="panel" id="panel-style"></div>
-        <div class="panel" id="panel-typos"></div>
+    <div class="panel" id="panel-typos"></div>
     <div class="panel" id="panel-sim"></div>
     <div class="panel" id="panel-missing"></div>
     <div class="panel" id="panel-students"></div>
@@ -396,7 +397,7 @@ const NEISCheck = (() => {
       alt: '해당 내용 삭제'
     },
     {
-            id: 'extaward', grade: '금지', label: '교외상·표창',
+      id: 'extaward', grade: '금지', label: '교외상·표창',
       re: /표창장|표창을|감사장|공로상/g,
       reason: '교외 수상·표창(표창장·감사장·공로상 등)은 기재 불가',
       alt: '해당 내용 삭제'
@@ -424,7 +425,9 @@ const NEISCheck = (() => {
   // 문체·클리셰 규칙
   const STYLE_WORDS = ['매사에', '언제나', '항상', '누구보다'];
   const REPEAT_WORD = { word: '꾸준', min: 2 };
-    const TYPO_RULES = [
+
+  // 오탈자·표기 규칙 (오프라인 규칙 기반)
+  const TYPO_RULES = [
     { re: /되요|되서(?![가-힣])|안되(?=[\s.,])/g, fix: "'돼요/돼서/안 돼' — 되+어는 '돼'" },
     { re: /돼다|돼는|돼기/g, fix: "'되다/되는/되기' — '돼'는 '되어'의 준말" },
     { re: /않되|않돼/g, fix: "'안 되/안 돼'" },
@@ -770,6 +773,57 @@ const NEISCheck = (() => {
     return out;
   }
 
+  /* ---------- 선택과목 현황(매트릭스) 파싱 ---------- */
+  // 헤더 [학번|이름|과목1|과목2|…] — 과목 칸이 채워져 있으면(분반 표시 등) 그 과목을 수강하는 것으로 해석
+  function parseRosterMatrix(sheets) {
+    const setting = { subjects: [], roster: [], teachers: [], ok: false };
+    const seenSub = new Set();
+    for (const rows of Object.values(sheets)) {
+      let head = null, idCol = -1, nameCol = -1;
+      for (const row of rows) {
+        const t = (row || []).map(v => v == null ? '' : String(v).trim());
+        if (head == null) {
+          idCol = t.findIndex(x => x.replace(/\s/g, '') === '학번');
+          nameCol = t.findIndex(x => x.replace(/\s/g, '') === '이름' || x.replace(/\s/g, '') === '성명');
+          if (idCol !== -1 && nameCol !== -1) head = t;
+          continue;
+        }
+        const id = t[idCol];
+        if (!/^\d{5}$/.test(id)) continue;
+        const grade = +id[0], klass = +id.slice(1, 3), num = +id.slice(3, 5);
+        const classCode = `${grade}${klass}`;
+        const sid = `${classCode}${String(num).padStart(2, '0')}`;
+        for (let c = 0; c < head.length; c++) {
+          if (c === idCol || c === nameCol || !head[c]) continue;
+          if (!t[c]) continue;
+          const subName = head[c];
+          const norm = normSubject(subName);
+          setting.roster.push({ norm, name: subName, classCode, sid, student: t[nameCol] });
+          const subKey = grade + '|' + norm;
+          if (!seenSub.has(subKey)) { seenSub.add(subKey); setting.subjects.push({ grade, name: subName, norm, type: '명단' }); }
+        }
+      }
+    }
+    setting.ok = setting.roster.length > 0;
+    return setting;
+  }
+
+  /* ---------- 세팅데이터 + 선택과목 명단 병합 ---------- */
+  function mergeSettings(base, extra) {
+    if (!base || !base.ok) return extra;
+    if (!extra || !extra.ok) return base;
+    const out = { subjects: base.subjects.map(s => ({ ...s })), roster: [...base.roster], teachers: [...base.teachers], ok: true };
+    const rSet = new Set(out.roster.map(r => r.sid + '|' + r.norm));
+    for (const r of extra.roster) if (!rSet.has(r.sid + '|' + r.norm)) { rSet.add(r.sid + '|' + r.norm); out.roster.push(r); }
+    const sMap = new Map(out.subjects.map(s => [s.grade + '|' + s.norm, s]));
+    for (const s of extra.subjects) {
+      const k = s.grade + '|' + s.norm;
+      if (!sMap.has(k)) { const c = { ...s }; sMap.set(k, c); out.subjects.push(c); }
+      else if (sMap.get(k).type === '대기') sMap.get(k).type = '명단';
+    }
+    return out;
+  }
+
   /* ---------- 세팅데이터 파싱 ---------- */
   // sheets: { name: [[...], ...] }
   function parseSetting(sheets) {
@@ -800,7 +854,9 @@ const NEISCheck = (() => {
   /* ---------- 검사 실행 ---------- */
   function runChecks(students, setting) {
     const res = { forbidden: [], length: [], style: [], similarity: [], typos: [], missing: null, students };
-        if (setting && setting.ok && setting.teachers.length) {
+
+    // 0) 교과 항목에 담당 교사 주석 달기 (세팅데이터의 교사배정 기준: 학년+과목+반)
+    if (setting && setting.ok && setting.teachers.length) {
       for (const st of students) for (const en of st.entries) {
         if (en.type === '교과' && en.subject && st.grade != null) {
           const hits = setting.teachers.filter(t => t.grade === st.grade && t.norm === normSubject(en.subject) && (!st.classCode || t.classes.includes(st.classCode)));
@@ -833,7 +889,8 @@ const NEISCheck = (() => {
             });
           }
         }
-                for (const tr of TYPO_RULES) {
+        // 오탈자·표기
+        for (const tr of TYPO_RULES) {
           tr.re.lastIndex = 0;
           let tm;
           const tseen = new Set();
@@ -882,8 +939,8 @@ const NEISCheck = (() => {
     }
     res.similarity.sort((a, b) => b.sim - a.sim);
 
-    // 5) 미입력 (세팅데이터 필요)
-        const hasGwa = students.some(st => st.entries.some(e => e.type === '교과'));
+    // 5) 미입력 (세팅데이터 + 교과 데이터가 있을 때만 — 창체·행특만 올린 경우 제외)
+    const hasGwa = students.some(st => st.entries.some(e => e.type === '교과'));
     if (setting && setting.ok && hasGwa) {
       const rosterBySid = new Map();
       for (const r of setting.roster) {
@@ -975,7 +1032,7 @@ const NEISCheck = (() => {
     return { sa, sb, hitA, hitB };
   }
 
-  return { neisBytes, normSubject, normText, trigrams, jaccard, splitSentences, parseSetuk, parseChangche, parseHaengteuk, mergeStudents, parseSetting, runChecks, sentenceOverlap, limitFor, RULES, LIMITS, STYLE_WORDS, REPEAT_WORD };
+  return { neisBytes, normSubject, normText, trigrams, jaccard, splitSentences, parseSetuk, parseChangche, parseHaengteuk, mergeStudents, parseSetting, parseRosterMatrix, mergeSettings, runChecks, sentenceOverlap, limitFor, RULES, LIMITS, STYLE_WORDS, REPEAT_WORD };
 })();
 if (typeof module !== 'undefined') module.exports = NEISCheck;
 
@@ -1020,6 +1077,8 @@ function classifyWb(sheets) {
       if (joined.includes('창의적체험활동')) return 'changche';
       if (joined.includes('행동특성') || joined.includes('행 동 특 성')) return 'haengteuk';
       if (joined.includes('세부능력')) return 'setuk';
+      const nr = (row || []).map(v => v == null ? '' : String(v).replace(/\s/g, ''));
+      if (nr.includes('학번') && (nr.includes('이름') || nr.includes('성명'))) return 'roster';
       if (/\d\s*학년\s*\d{1,2}\s*반/.test(joined)) sawClass = true;
     }
   }
@@ -1042,7 +1101,7 @@ async function addFiles(fileList) {
   renderFileList();
 }
 function renderFileList() {
-  const kindLabel = { setuk: '세특', changche: '창체', haengteuk: '행동특성', setting: '세팅데이터', unknown: '인식 실패' };
+  const kindLabel = { setuk: '세특', changche: '창체', haengteuk: '행동특성', setting: '세팅데이터', roster: '수강명단', unknown: '인식 실패' };
   $('#file-list').innerHTML = state.files.map((f, i) => `
     <div class="file-row">
       <span class="tag ${f.kind}">${kindLabel[f.kind]}</span>
@@ -1075,10 +1134,15 @@ $('#btn-run').onclick = () => {
   const students = NEISCheck.mergeStudents(lists);
   const settingFile = state.files.find(f => f.kind === 'setting');
   state.setting = settingFile ? NEISCheck.parseSetting(settingFile.sheets) : null;
-    if (state.setting && state.setting.ok) {
+  if (state.setting && state.setting.ok) {
     try { localStorage.setItem('neisSetting', JSON.stringify({ when: Date.now(), data: state.setting })); } catch (e) {}
   } else if (!state.setting) {
     try { const sv = JSON.parse(localStorage.getItem('neisSetting')); if (sv && sv.data && sv.data.ok) state.setting = sv.data; } catch (e) {}
+  }
+  const rosterFiles = state.files.filter(f => f.kind === 'roster');
+  if (rosterFiles.length) {
+    for (const rf of rosterFiles) state.setting = NEISCheck.mergeSettings(state.setting, NEISCheck.parseRosterMatrix(rf.sheets));
+    if (state.setting && state.setting.ok) { try { localStorage.setItem('neisSetting', JSON.stringify({ when: Date.now(), data: state.setting })); } catch (e) {} }
   }
   state.students = students;
   if (!students.length) { $('#drop-msg').textContent = '학생 데이터를 찾지 못했습니다. NEIS에서 내려받은 원본 파일인지 확인해 주세요.'; return; }
@@ -1102,14 +1166,14 @@ try {
 
 /* ---------- 메인 렌더 ---------- */
 function classesOf() { return [...new Set(state.students.map(s => s.classCode).filter(Boolean))].sort(); }
-function fmtClass(cc) { return cc ? `${cc[0]}학년 ${+cc.slice(1)}반` : '반 미상'; }
 function tch(en) { return en && en.teacher ? `<span class="subj" style="color:var(--faint)">· ${esc(en.teacher)} 선생님</span>` : ''; }
+function fmtClass(cc) { return cc ? `${cc[0]}학년 ${+cc.slice(1)}반` : '반 미상'; }
 function stuLabel(st) { return `${st.num}번 ${st.name}`; }
 
 function renderMain() {
   const r = state.res;
   const classes = classesOf();
-    const kindNames = { setuk: '세특', changche: '창체', haengteuk: '행동특성' };
+  const kindNames = { setuk: '세특', changche: '창체', haengteuk: '행동특성' };
   const kinds = [...new Set(state.files.map(f => kindNames[f.kind]).filter(Boolean))].join('·');
   $('#scope-label').textContent = `${classes.map(fmtClass).join(', ')} · 학생 ${state.students.length}명 · ${kinds} 자료` + (state.setting?.ok ? ' · 세팅데이터 연동됨' : ' · 세팅데이터 없음');
   const forbidCnt = r.forbidden.filter(f => f.rule.grade === '금지').length;
@@ -1121,9 +1185,9 @@ function renderMain() {
     ['forbidden', '기재금지', r.forbidden.length, forbidCnt ? 'hot' : (r.forbidden.length ? 'warm' : 'zero')],
     ['length', '분량', r.length.length, r.length.some(l => l.kind === 'over') ? 'hot' : (r.length.length ? 'warm' : 'zero')],
     ['style', '문체', r.style.length, r.style.length ? 'warm' : 'zero'],
-        ['typos', '오탈자', r.typos.length, r.typos.length ? 'warm' : 'zero'],
+    ['typos', '오탈자', r.typos.length, r.typos.length ? 'warm' : 'zero'],
     ['sim', '유사도', r.similarity.length, r.similarity.some(s => s.grade === '위험') ? 'hot' : (r.similarity.length ? 'warm' : 'zero')],
-        ['missing', r.missing ? '미입력' : '미작성', missCnt, missCnt ? 'warm' : (missCnt === 0 ? 'zero' : '')],
+    ['missing', r.missing ? '미입력' : '미작성', missCnt, missCnt ? 'warm' : (missCnt === 0 ? 'zero' : '')],
     ['students', '학생별', null, ''],
   ];
   $('#tabs').innerHTML = tabs.map(([id, label, cnt, cls]) =>
@@ -1168,7 +1232,8 @@ function renderDash() {
   } else {
     if (state.students.some(st => st.entries.some(e => e.type === '교과'))) html += `<div class="empty"><div class="big">ℹ️</div>세팅데이터 파일(수강명단·교사배정)을 함께 올리면<br>과목별 입력률과 미입력 학생 목록을 볼 수 있습니다.</div>`;
   }
-    {
+  // 창체 영역별 작성 현황 (창체 데이터가 있을 때)
+  {
     const ccAgg = new Map();
     for (const st of state.students) {
       for (const en of st.entries) if (en.type === '창체') {
@@ -1270,6 +1335,7 @@ function renderStyle() {
       <div class="issue-body">'<b>${esc(s.word)}</b>' ${s.kind === 'repeat' ? `표현이 한 과목 안에서 ${s.count}회 사용됨 — 다른 표현으로 다듬어 주세요.` : `사용 (${s.count}회) — 상투적 표현이라 구체적 사실 중심 서술이 좋습니다.`}</div>
     </div>`).join('');
 }
+
 function renderTypos() {
   const r = state.res;
   let html = `<div class="section-note">오프라인 규칙 검사입니다 — 자주 틀리는 맞춤법·외래어 표기·이중 피동·단어 반복·문장부호·서술형 종결을 잡습니다 (완전한 맞춤법 검사를 대신하지는 않음)</div>`;
@@ -1330,7 +1396,7 @@ function renderMissing() {
   }
   // ② 수강명단 대비 미입력 과목 (세팅데이터 필요)
   if (!r.missing) {
-        if (state.students.some(st => st.entries.some(e => e.type === '교과'))) html += `<div class="empty"><div class="big">ℹ️</div>세팅데이터 파일이 없어 수강명단 대비 미입력 과목 검사는 건너뛰었습니다.<br>수강명단·교사배정 시트가 든 파일을 함께 올려 주세요.</div>`;
+    if (state.students.some(st => st.entries.some(e => e.type === '교과'))) html += `<div class="empty"><div class="big">ℹ️</div>세팅데이터 파일이 없어 수강명단 대비 미입력 과목 검사는 건너뛰었습니다.<br>수강명단·교사배정 시트가 든 파일을 함께 올려 주세요.</div>`;
     $('#panel-missing').innerHTML = html; return;
   }
   const rows = r.missing.subjects.filter(s => s.entered < s.enrolled);
@@ -1421,16 +1487,16 @@ $('#btn-export').onclick = () => {
     ['미입력 과목', r.missing ? r.missing.subjects.filter(s => s.entered < s.enrolled).length : '검사 안 함', ''],
     ['검사일', new Date().toLocaleDateString('ko-KR'), '기준: 과목당 ' + NEISCheck.LIMITS.maxBytes + 'B'],
   ]);
-  aoa('기재금지', ['등급', '유형', '반', '번호', '성명', '과목', '표현', '문맥', '사유', '대안'],
-    r.forbidden.map(f => [f.rule.grade, f.rule.label, fmtClass(f.st.classCode), f.st.num, f.st.name, f.entry.label, f.match, f.context, f.rule.reason, f.rule.alt]));
-  aoa('분량', ['구분', '반', '번호', '성명', '과목', '바이트', '기준 대비'],
-    r.length.map(l => [l.kind === 'over' ? '상한 초과' : '부족', fmtClass(l.st.classCode), l.st.num, l.st.name, l.entry.label, l.entry.bytes, (l.kind === 'over' ? '+' : '-') + l.diff + 'B']));
-  aoa('문체', ['구분', '반', '번호', '성명', '과목', '표현', '횟수'],
-    r.style.map(s => [s.kind === 'repeat' ? '반복' : '클리셰', fmtClass(s.st.classCode), s.st.num, s.st.name, s.entry.label, s.word, s.count]));
-      aoa('오탈자', ['반', '번호', '성명', '과목', '담당', '표현', '문맥', '바른 표기'],
+  aoa('기재금지', ['등급', '유형', '반', '번호', '성명', '과목', '담당', '표현', '문맥', '사유', '대안'],
+    r.forbidden.map(f => [f.rule.grade, f.rule.label, fmtClass(f.st.classCode), f.st.num, f.st.name, f.entry.label, f.entry.teacher || '', f.match, f.context, f.rule.reason, f.rule.alt]));
+  aoa('분량', ['구분', '반', '번호', '성명', '과목', '담당', '바이트', '기준 대비'],
+    r.length.map(l => [l.kind === 'over' ? '상한 초과' : '부족', fmtClass(l.st.classCode), l.st.num, l.st.name, l.entry.label, l.entry.teacher || '', l.entry.bytes, (l.kind === 'over' ? '+' : '-') + l.diff + 'B']));
+  aoa('문체', ['구분', '반', '번호', '성명', '과목', '담당', '표현', '횟수'],
+    r.style.map(s => [s.kind === 'repeat' ? '반복' : '클리셰', fmtClass(s.st.classCode), s.st.num, s.st.name, s.entry.label, s.entry.teacher || '', s.word, s.count]));
+  aoa('오탈자', ['반', '번호', '성명', '과목', '담당', '표현', '문맥', '바른 표기'],
     r.typos.map(t => [fmtClass(t.st.classCode), t.st.num, t.st.name, t.entry.label, t.entry.teacher || '', t.match, t.context, t.fix]));
-  aoa('유사도', ['등급', '과목', '학생A', '학생B', '유사도'],
-    r.similarity.map(s => [s.grade, s.subject, `${fmtClass(s.a.st.classCode)} ${stuLabel(s.a.st)}`, `${fmtClass(s.b.st.classCode)} ${stuLabel(s.b.st)}`, (s.sim * 100).toFixed(0) + '%']));
+  aoa('유사도', ['등급', '과목', '담당', '학생A', '학생B', '유사도'],
+    r.similarity.map(s => [s.grade, s.subject, s.a.entry.teacher || '', `${fmtClass(s.a.st.classCode)} ${stuLabel(s.a.st)}`, `${fmtClass(s.b.st.classCode)} ${stuLabel(s.b.st)}`, (s.sim * 100).toFixed(0) + '%']));
   if (r.missing) aoa('미입력(교사 독려)', ['반', '과목', '담당 교사', '입력', '수강', '미입력 학생', '비고'],
     r.missing.subjects.filter(s => s.entered < s.enrolled).map(s =>
       [fmtClass(s.classCode), s.name, s.teacher || '', s.entered, s.enrolled, s.missingStudents.map(x => x.name).join(', '), s.isWait ? '수강명단 미확보(반 전체 기준)' : '']));
