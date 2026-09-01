@@ -939,6 +939,34 @@ const NEISCheck = (() => {
     }
     res.similarity.sort((a, b) => b.sim - a.sim);
 
+    // 1학년 자동 명단: 공통과목 체제이므로, 반에서 한 명이라도 입력된 과목은 반 전원 수강으로 간주
+    {
+      const auto = { subjects: [], roster: [], teachers: [], ok: false };
+      const byClass = new Map();
+      for (const st of students) {
+        if (st.grade !== 1 || !st.classCode || !st.sid) continue;
+        if (!byClass.has(st.classCode)) byClass.set(st.classCode, { studs: [], subs: new Map() });
+        const g = byClass.get(st.classCode);
+        g.studs.push(st);
+        for (const en of st.entries) if (en.type === '교과' && en.subject) {
+          const nk = normSubject(en.subject);
+          if (!g.subs.has(nk)) g.subs.set(nk, { name: en.subject, count: 0 });
+          g.subs.get(nk).count++;
+        }
+      }
+      const seen = new Set();
+      for (const [cc, g] of byClass) {
+        for (const [norm, info] of g.subs) {
+          if (info.count * 2 <= g.studs.length) continue; // 반 과반이 듣는 과목만 공통으로 간주 (전공·소수 선택 제외)
+          const name = info.name;
+          for (const st of g.studs) auto.roster.push({ norm, name, classCode: cc, sid: st.sid, student: st.name });
+          if (!seen.has(norm)) { seen.add(norm); auto.subjects.push({ grade: 1, name, norm, type: '명단' }); }
+        }
+      }
+      auto.ok = auto.roster.length > 0;
+      if (auto.ok) setting = mergeSettings(setting, auto);
+    }
+
     // 5) 미입력 (세팅데이터 + 교과 데이터가 있을 때만 — 창체·행특만 올린 경우 제외)
     const hasGwa = students.some(st => st.entries.some(e => e.type === '교과'));
     if (setting && setting.ok && hasGwa) {
