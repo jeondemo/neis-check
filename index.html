@@ -883,7 +883,8 @@ const NEISCheck = (() => {
     res.similarity.sort((a, b) => b.sim - a.sim);
 
     // 5) 미입력 (세팅데이터 필요)
-    if (setting && setting.ok) {
+        const hasGwa = students.some(st => st.entries.some(e => e.type === '교과'));
+    if (setting && setting.ok && hasGwa) {
       const rosterBySid = new Map();
       for (const r of setting.roster) {
         if (!rosterBySid.has(r.sid)) rosterBySid.set(r.sid, []);
@@ -1108,7 +1109,9 @@ function stuLabel(st) { return `${st.num}번 ${st.name}`; }
 function renderMain() {
   const r = state.res;
   const classes = classesOf();
-  $('#scope-label').textContent = `${classes.map(fmtClass).join(', ')} · 학생 ${state.students.length}명` + (state.setting?.ok ? ' · 세팅데이터 연동됨' : ' · 세팅데이터 없음(미입력 검사 제외)');
+    const kindNames = { setuk: '세특', changche: '창체', haengteuk: '행동특성' };
+  const kinds = [...new Set(state.files.map(f => kindNames[f.kind]).filter(Boolean))].join('·');
+  $('#scope-label').textContent = `${classes.map(fmtClass).join(', ')} · 학생 ${state.students.length}명 · ${kinds} 자료` + (state.setting?.ok ? ' · 세팅데이터 연동됨' : ' · 세팅데이터 없음');
   const forbidCnt = r.forbidden.filter(f => f.rule.grade === '금지').length;
   const missSubjCnt = r.missing ? r.missing.subjects.filter(s => s.entered < s.enrolled).length : 0;
   const blankCnt = (r.blanks || []).length;
@@ -1120,7 +1123,7 @@ function renderMain() {
     ['style', '문체', r.style.length, r.style.length ? 'warm' : 'zero'],
         ['typos', '오탈자', r.typos.length, r.typos.length ? 'warm' : 'zero'],
     ['sim', '유사도', r.similarity.length, r.similarity.some(s => s.grade === '위험') ? 'hot' : (r.similarity.length ? 'warm' : 'zero')],
-    ['missing', '미입력', missCnt, missCnt ? 'warm' : (missCnt === 0 ? 'zero' : '')],
+        ['missing', r.missing ? '미입력' : '미작성', missCnt, missCnt ? 'warm' : (missCnt === 0 ? 'zero' : '')],
     ['students', '학생별', null, ''],
   ];
   $('#tabs').innerHTML = tabs.map(([id, label, cnt, cls]) =>
@@ -1163,7 +1166,36 @@ function renderDash() {
     html += `<div class="section-note">막대가 가득 차면 입력 완료 · <b>명단 없음</b> 표시는 수강명단이 확보되지 않아 반 전체 인원 기준으로 집계한 과목</div>`;
     html += `<div class="rate-table" id="rate-table"></div>`;
   } else {
-    html += `<div class="empty"><div class="big">ℹ️</div>세팅데이터 파일(수강명단·교사배정)을 함께 올리면<br>과목별 입력률과 미입력 학생 목록을 볼 수 있습니다.</div>`;
+    if (state.students.some(st => st.entries.some(e => e.type === '교과'))) html += `<div class="empty"><div class="big">ℹ️</div>세팅데이터 파일(수강명단·교사배정)을 함께 올리면<br>과목별 입력률과 미입력 학생 목록을 볼 수 있습니다.</div>`;
+  }
+    {
+    const ccAgg = new Map();
+    for (const st of state.students) {
+      for (const en of st.entries) if (en.type === '창체') {
+        const k = (st.classCode || '?') + '|' + en.label;
+        if (!ccAgg.has(k)) ccAgg.set(k, { classCode: st.classCode, area: en.label, done: 0, total: 0 });
+        ccAgg.get(k).done++; ccAgg.get(k).total++;
+      }
+      for (const bl of (st.blanks || [])) if (bl.type === '창체') {
+        const k = (st.classCode || '?') + '|' + bl.label;
+        if (!ccAgg.has(k)) ccAgg.set(k, { classCode: st.classCode, area: bl.label, done: 0, total: 0 });
+        ccAgg.get(k).total++;
+      }
+    }
+    if (ccAgg.size) {
+      const rows = [...ccAgg.values()].sort((a, b) => (a.classCode || '').localeCompare(b.classCode || '') || a.area.localeCompare(b.area));
+      html += `<div class="section-title">창체 영역별 작성 현황</div>
+        <div class="section-note">자율·자치 / 동아리 / 진로 영역별 작성 인원 (배정 시간이 있는 학생 기준)</div>
+        <div class="rate-table">` + rows.map(s => {
+        const pct = s.total ? Math.round(s.done / s.total * 100) : 0;
+        return `<div class="rate-row">
+          <span class="r-name">${fmtClass(s.classCode)} · ${esc(s.area)}</span>
+          <div class="rate-bar"><i class="${pct === 100 ? 'full' : (pct === 0 ? 'zero' : '')}" style="width:${Math.max(pct, 2)}%"></i></div>
+          <span class="r-num">${s.done}/${s.total}명</span>
+          <span class="r-teacher"></span>
+        </div>`;
+      }).join('') + '</div>';
+    }
   }
   $('#panel-dash').innerHTML = html;
   if (r.missing) {
@@ -1298,7 +1330,7 @@ function renderMissing() {
   }
   // ② 수강명단 대비 미입력 과목 (세팅데이터 필요)
   if (!r.missing) {
-    html += `<div class="empty"><div class="big">ℹ️</div>세팅데이터 파일이 없어 수강명단 대비 미입력 과목 검사는 건너뛰었습니다.<br>수강명단·교사배정 시트가 든 파일을 함께 올려 주세요.</div>`;
+        if (state.students.some(st => st.entries.some(e => e.type === '교과'))) html += `<div class="empty"><div class="big">ℹ️</div>세팅데이터 파일이 없어 수강명단 대비 미입력 과목 검사는 건너뛰었습니다.<br>수강명단·교사배정 시트가 든 파일을 함께 올려 주세요.</div>`;
     $('#panel-missing').innerHTML = html; return;
   }
   const rows = r.missing.subjects.filter(s => s.entered < s.enrolled);
