@@ -242,6 +242,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
     <div class="panel" id="panel-forbidden"></div>
     <div class="panel" id="panel-length"></div>
     <div class="panel" id="panel-style"></div>
+        <div class="panel" id="panel-typos"></div>
     <div class="panel" id="panel-sim"></div>
     <div class="panel" id="panel-missing"></div>
     <div class="panel" id="panel-students"></div>
@@ -411,6 +412,33 @@ const NEISCheck = (() => {
   // 문체·클리셰 규칙
   const STYLE_WORDS = ['매사에', '언제나', '항상', '누구보다'];
   const REPEAT_WORD = { word: '꾸준', min: 2 };
+    const TYPO_RULES = [
+    { re: /되요|되서(?![가-힣])|안되(?=[\s.,])/g, fix: "'돼요/돼서/안 돼' — 되+어는 '돼'" },
+    { re: /돼다|돼는|돼기/g, fix: "'되다/되는/되기' — '돼'는 '되어'의 준말" },
+    { re: /않되|않돼/g, fix: "'안 되/안 돼'" },
+    { re: /몇일/g, fix: "'며칠'" },
+    { re: /금새/g, fix: "'금세'" },
+    { re: /역활/g, fix: "'역할'" },
+    { re: /갯수/g, fix: "'개수'" },
+    { re: /오랫만/g, fix: "'오랜만'" },
+    { re: /왠만/g, fix: "'웬만'" },
+    { re: /웬지/g, fix: "'왠지'" },
+    { re: /희안하/g, fix: "'희한하'" },
+    { re: /어의없/g, fix: "'어이없'" },
+    { re: /(?<![가-힣])들어나(?=[다는남났])/g, fix: "'드러나-'" },
+    { re: /할려고|할려는/g, fix: "'하려고/하려는'" },
+    { re: /데이타/g, fix: "'데이터'" },
+    { re: /리더쉽/g, fix: "'리더십'" },
+    { re: /멤버쉽/g, fix: "'멤버십'" },
+    { re: /컨텐츠/g, fix: "'콘텐츠'" },
+    { re: /어플(?![가-힣])/g, fix: "'앱' 또는 '애플리케이션'" },
+    { re: /되어지|보여지|쓰여지|잊혀지|모여지/g, fix: "이중 피동 — '되-, 보이-, 쓰이-, 잊히-'로 간결하게" },
+    { re: /([가-힣]{2,})\s+\1(?=[\s.,])/g, fix: "같은 단어 반복 — 하나 삭제" },
+    { re: /\.\.(?!\.)/g, fix: "마침표 중복" },
+    { re: /\s[.,](?=\s|$)/g, fix: "문장부호 앞 공백" },
+    { re: /[가-힣][했였]다\./g, fix: "서술형 종결 — 생기부는 '~함/~임' 명사형 종결 권장" },
+    { re: /읍니다/g, fix: "'습니다'" },
+  ];
 
   /* ---------- 세특 파일 파싱 ---------- */
   // NEIS 다운로드 형식 2종 자동 인식:
@@ -759,7 +787,7 @@ const NEISCheck = (() => {
 
   /* ---------- 검사 실행 ---------- */
   function runChecks(students, setting) {
-    const res = { forbidden: [], length: [], style: [], similarity: [], missing: null, students };
+    const res = { forbidden: [], length: [], style: [], similarity: [], typos: [], missing: null, students };
         if (setting && setting.ok && setting.teachers.length) {
       for (const st of students) for (const en of st.entries) {
         if (en.type === '교과' && en.subject && st.grade != null) {
@@ -790,6 +818,20 @@ const NEISCheck = (() => {
             res.forbidden.push({
               st, entry: en, rule, match: m[0],
               context: (idx > 25 ? '…' : '') + ctx + (idx + m[0].length + 25 < en.body.length ? '…' : '')
+            });
+          }
+        }
+                for (const tr of TYPO_RULES) {
+          tr.re.lastIndex = 0;
+          let tm;
+          const tseen = new Set();
+          while ((tm = tr.re.exec(en.body)) !== null) {
+            if (tseen.has(tm[0])) continue;
+            tseen.add(tm[0]);
+            const ti = tm.index;
+            res.typos.push({
+              st, entry: en, match: tm[0], fix: tr.fix,
+              context: (ti > 25 ? '…' : '') + en.body.slice(Math.max(0, ti - 25), Math.min(en.body.length, ti + tm[0].length + 25)) + (ti + tm[0].length + 25 < en.body.length ? '…' : '')
             });
           }
         }
@@ -1064,6 +1106,7 @@ function renderMain() {
     ['forbidden', '기재금지', r.forbidden.length, forbidCnt ? 'hot' : (r.forbidden.length ? 'warm' : 'zero')],
     ['length', '분량', r.length.length, r.length.some(l => l.kind === 'over') ? 'hot' : (r.length.length ? 'warm' : 'zero')],
     ['style', '문체', r.style.length, r.style.length ? 'warm' : 'zero'],
+        ['typos', '오탈자', r.typos.length, r.typos.length ? 'warm' : 'zero'],
     ['sim', '유사도', r.similarity.length, r.similarity.some(s => s.grade === '위험') ? 'hot' : (r.similarity.length ? 'warm' : 'zero')],
     ['missing', '미입력', missCnt, missCnt ? 'warm' : (missCnt === 0 ? 'zero' : '')],
     ['students', '학생별', null, ''],
@@ -1071,7 +1114,7 @@ function renderMain() {
   $('#tabs').innerHTML = tabs.map(([id, label, cnt, cls]) =>
     `<button data-tab="${id}">${label}${cnt != null ? `<span class="cnt ${cls}">${cnt}</span>` : ''}</button>`).join('');
   document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => showTab(b.dataset.tab));
-  renderDash(); renderForbidden(); renderLength(); renderStyle(); renderSim(); renderMissing(); renderStudents();
+  renderDash(); renderForbidden(); renderLength(); renderStyle(); renderTypos(); renderSim(); renderMissing(); renderStudents();
   showTab('dash');
 }
 function showTab(id) {
@@ -1183,7 +1226,23 @@ function renderStyle() {
       <div class="issue-body">'<b>${esc(s.word)}</b>' ${s.kind === 'repeat' ? `표현이 한 과목 안에서 ${s.count}회 사용됨 — 다른 표현으로 다듬어 주세요.` : `사용 (${s.count}회) — 상투적 표현이라 구체적 사실 중심 서술이 좋습니다.`}</div>
     </div>`).join('');
 }
-
+function renderTypos() {
+  const r = state.res;
+  let html = `<div class="section-note">오프라인 규칙 검사입니다 — 자주 틀리는 맞춤법·외래어 표기·이중 피동·단어 반복·문장부호·서술형 종결을 잡습니다 (완전한 맞춤법 검사를 대신하지는 않음)</div>`;
+  if (!r.typos.length) { $('#panel-typos').innerHTML = html + '<div class="empty"><div class="big">✅</div>오탈자·표기 오류가 발견되지 않았습니다.</div>'; return; }
+  $('#panel-typos').innerHTML = html + r.typos.map(t => `
+    <div class="issue">
+      <div class="issue-head">
+        <span class="pill warn">오탈자</span>
+        <span class="who">${fmtClass(t.st.classCode)} ${stuLabel(t.st)}</span>
+        <span class="subj">${esc(t.entry.label)}</span>${tch(t.entry)}
+      </div>
+      <div class="issue-body">
+        <div class="ctx">${esc(t.context).replace(esc(t.match), `<mark>${esc(t.match)}</mark>`)}</div>
+        <div class="why"><b>바른 표기</b> · ${esc(t.fix)}</div>
+      </div>
+    </div>`).join('');
+}
 function renderSim() {
   const r = state.res, L = NEISCheck.LIMITS;
   let html = `<div class="section-note">같은 과목을 들은 학생끼리 문자 3-gram 유사도를 비교합니다 · ${L.simDanger} 이상 위험, ${L.simWarn} 이상 주의 · 항목을 누르면 겹치는 문장이 나란히 표시됩니다</div>`;
@@ -1324,6 +1383,8 @@ $('#btn-export').onclick = () => {
     r.length.map(l => [l.kind === 'over' ? '상한 초과' : '부족', fmtClass(l.st.classCode), l.st.num, l.st.name, l.entry.label, l.entry.bytes, (l.kind === 'over' ? '+' : '-') + l.diff + 'B']));
   aoa('문체', ['구분', '반', '번호', '성명', '과목', '표현', '횟수'],
     r.style.map(s => [s.kind === 'repeat' ? '반복' : '클리셰', fmtClass(s.st.classCode), s.st.num, s.st.name, s.entry.label, s.word, s.count]));
+      aoa('오탈자', ['반', '번호', '성명', '과목', '담당', '표현', '문맥', '바른 표기'],
+    r.typos.map(t => [fmtClass(t.st.classCode), t.st.num, t.st.name, t.entry.label, t.entry.teacher || '', t.match, t.context, t.fix]));
   aoa('유사도', ['등급', '과목', '학생A', '학생B', '유사도'],
     r.similarity.map(s => [s.grade, s.subject, `${fmtClass(s.a.st.classCode)} ${stuLabel(s.a.st)}`, `${fmtClass(s.b.st.classCode)} ${stuLabel(s.b.st)}`, (s.sim * 100).toFixed(0) + '%']));
   if (r.missing) aoa('미입력(교사 독려)', ['반', '과목', '담당 교사', '입력', '수강', '미입력 학생', '비고'],
