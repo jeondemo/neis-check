@@ -1252,7 +1252,7 @@ function renderSim() {
       <div class="issue-head">
         <span class="pill ${s.grade === '위험' ? 'danger' : 'warn'}">${s.grade}</span>
         <span class="subj">${esc(s.subject)}</span>${tch(s.a.entry)}
-        <span class="who">${stuLabel(s.a.st)} ↔ ${stuLabel(s.b.st)}</span>
+        <span class="who">${fmtClass(s.a.st.classCode)} ${stuLabel(s.a.st)} ↔ ${fmtClass(s.b.st.classCode)} ${stuLabel(s.b.st)}</span>
         <span class="sim-score ${s.grade === '위험' ? 'hot' : 'mid'}" style="margin-left:auto">${(s.sim * 100).toFixed(0)}%</span>
       </div>
       <div class="sim-detail" id="simd-${i}"></div>
@@ -1262,7 +1262,7 @@ function renderSim() {
     if (d.classList.contains('open')) { d.classList.remove('open'); return; }
     if (!d.innerHTML) {
       const ov = NEISCheck.sentenceOverlap(s.a.entry.body, s.b.entry.body);
-      const col = (st, sents, hits) => `<div class="sim-col"><h4>${stuLabel(st)} · ${esc(s.subject)}</h4>${sents.map((t, k) => `<p class="${hits.has(k) ? 'hit' : ''}">${esc(t)}</p>`).join('')}</div>`;
+      const col = (st, sents, hits) => `<div class="sim-col"><h4>${fmtClass(st.classCode)} ${stuLabel(st)} · ${esc(s.subject)}</h4>${sents.map((t, k) => `<p class="${hits.has(k) ? 'hit' : ''}">${esc(t)}</p>`).join('')}</div>`;
       d.innerHTML = col(s.a.st, ov.sa, ov.hitA) + col(s.b.st, ov.sb, ov.hitB);
     }
     d.classList.add('open');
@@ -1350,7 +1350,7 @@ function drawStudent(st, iss) {
     for (const x of iss.sty.filter(x => x.entry === en)) eIss.push(`<div class="ei w"><b>[문체]</b> '${esc(x.word)}' ${x.count}회</div>`);
     for (const x of iss.sim.filter(x => x.a.entry === en || x.b.entry === en)) {
       const other = x.a.entry === en ? x.b.st : x.a.st;
-      eIss.push(`<div class="ei ${x.grade === '위험' ? 'r' : 'w'}"><b>[유사도 ${x.grade}]</b> ${esc(stuLabel(other))}와 ${(x.sim * 100).toFixed(0)}% 유사 — 유사도 탭에서 비교</div>`);
+      eIss.push(`<div class="ei ${x.grade === '위험' ? 'r' : 'w'}"><b>[유사도 ${x.grade}]</b> ${fmtClass(other.classCode)} ${esc(stuLabel(other))}와 ${(x.sim * 100).toFixed(0)}% 유사 — 유사도 탭에서 비교</div>`);
     }
     return `<div class="entry-card">
       <div class="entry-head"><h3>${en.type && en.type !== '교과' ? `<span class="pill info" style="margin-right:6px">${en.type}</span>` : ''}${esc(en.label)}</h3>${tch(en)}
