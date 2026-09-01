@@ -319,7 +319,7 @@ const NEISCheck = (() => {
   const RULES = [
     {
       id: 'lang-test', grade: '금지', label: '공인어학시험',
-      re: /토익|TOEIC|토플|TOEFL|텝스|TEPS|아이엘츠|IELTS|JLPT|JPT|HSK|DELE|DELF|DALF|G-?TELP|지텔프|TOSEL|토셀|OPIc|오픽/gi,
+      re: /토익|토플|텝스|아이엘츠|지텔프|토셀|오픽|\bTOEIC\b|\bTOEFL\b|\bTEPS\b|\bIELTS\b|\bJLPT\b|\bJPT\b|\bHSK\b|\bDELE\b|\bDELF\b|\bDALF\b|\bG-?TELP\b|\bTOSEL\b|\bOPIc\b/gi,
       reason: '공인어학시험 참여 사실 및 성적(모의 포함)은 기재 불가',
       alt: '해당 내용을 삭제하고 교과 수업 내 활동과 성장 과정으로 대체'
     },
@@ -386,7 +386,7 @@ const NEISCheck = (() => {
     },
     {
       id: 'mooc', grade: '주의', label: '교외 온라인 강좌',
-      re: /K-?MOOC|무크|MOOC/gi,
+      re: /\bK-?MOOC\b|\bMOOC\b|무크/gi,
       reason: '교외 온라인 강좌 수강은 기재 불가 항목일 수 있음 (확인 필요)',
       alt: '수강 사실 대신 탐구 주제와 배운 내용 중심으로 서술'
     },
@@ -395,6 +395,18 @@ const NEISCheck = (() => {
       re: /(?:아버지|어머니|부모님|아빠|엄마)[의가]?\s*(?:직업|회사|직장|도움|지원)/g,
       reason: '부모의 사회·경제적 지위 암시 내용은 기재 불가',
       alt: '해당 내용 삭제'
+    },
+    {
+      id: 'intlorg', grade: '금지', label: '국제기구·기관명',
+      re: /유엔|유네스코|유럽연합|세계\s*보건\s*기구|세계\s*무역\s*기구|국회|\bUN\b|\bUNESCO\b|\bEU\b|\bWHO\b|\bWTO\b|\bTED\b/g,
+      reason: '기관명(기구·단체·조직 포함)은 기재 불가 — 교육부·시도교육청 및 소속기관만 예외',
+      alt: "기관명 삭제 또는 '국제기구'·'관련 기관' 등 일반 표현으로 변경"
+    },
+    {
+      id: 'platform', grade: '금지', label: '플랫폼·상호명',
+      re: /유튜브|구글|커리어넷|테드|캔바|인스타그램|틱톡|youtube|google|canva|instagram|tiktok/gi,
+      reason: '상호명(플랫폼·서비스명 포함)은 기재 불가',
+      alt: "상호명 삭제 또는 '온라인 영상 플랫폼'·'진로정보 사이트' 등 일반 표현으로 변경"
     },
     {
       id: 'extaward', grade: '금지', label: '교외상·표창',
