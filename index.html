@@ -1508,12 +1508,18 @@ function renderFileList() {
 }
 
 /* ---------- ① 사전 세팅 저장소 (이 브라우저에만 보관) ---------- */
-const SET_KEY = 'neisSettingV2';
+const SET_KEY = 'neisCheckSetting_gwhs'; // 학교별 전용 키 — 같은 도메인의 외고판과 저장 공간이 섞이지 않도록 분리
 let setSources = [];
 function loadSources() {
   try { const v = JSON.parse(localStorage.getItem(SET_KEY)); if (v && Array.isArray(v.sources)) { setSources = v.sources; return; } } catch (e) {}
   setSources = [];
-  try { // 이전 버전(통합 저장) 마이그레이션
+  try { // 예전 공용 키(neisSettingV2)에서 이사 — 원래 여고 데이터이므로 여고 키로 옮기고 공용 키는 제거
+    const v = JSON.parse(localStorage.getItem('neisSettingV2'));
+    if (v && Array.isArray(v.sources) && v.sources.length) { setSources = v.sources; saveSources(); }
+    localStorage.removeItem('neisSettingV2');
+  } catch (e) {}
+  if (setSources.length) return;
+  try { // 더 이전 버전(통합 저장) 마이그레이션
     const old = JSON.parse(localStorage.getItem('neisSetting'));
     if (old && old.data && old.data.ok) {
       setSources.push({ id: 'legacy', name: '이전 버전에서 저장된 세팅', kind: 'setting', sem: 0, when: old.when || Date.now(), data: old.data });
