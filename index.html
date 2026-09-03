@@ -1917,44 +1917,60 @@ function matPred(m) {
 }
 function matIssues(m) {
   const p = matPred(m), r = state.res;
+  const cOk = st => m.classes.size === 0 || m.classes.has(st.classCode);
   const blType = m.norm === '__cc__' ? '창체' : (m.norm === '__ht__' ? '행특' : null);
   return {
-    f: r.forbidden.filter(x => p(x.entry)),
-    l: r.length.filter(x => p(x.entry)),
-    sty: r.style.filter(x => p(x.entry)),
-    ty: r.typos.filter(x => p(x.entry)),
-    sim: r.similarity.filter(x => p(x.a.entry)),
-    blanks: blType ? state.students.flatMap(st => (st.blanks || []).filter(b => b.type === blType).map(b => ({ st, b }))) : []
+    f: r.forbidden.filter(x => p(x.entry) && cOk(x.st)),
+    l: r.length.filter(x => p(x.entry) && cOk(x.st)),
+    sty: r.style.filter(x => p(x.entry) && cOk(x.st)),
+    ty: r.typos.filter(x => p(x.entry) && cOk(x.st)),
+    sim: r.similarity.filter(x => p(x.a.entry) && (cOk(x.a.st) || cOk(x.b.st))),
+    blanks: blType ? state.students.filter(cOk).flatMap(st => (st.blanks || []).filter(b => b.type === blType).map(b => ({ st, b }))) : []
   };
 }
 function buildMats() {
+  // 반별로 카드를 분리 — 여러 반 파일을 올리면 과목·창체·행특 카드가 반마다 따로 생김
   const mats = [];
   const map = new Map();
   for (const st of state.students) for (const en of st.entries) {
     if (en.type !== '교과' || !en.subject) continue;
-    const k = NEISCheck.normSubject(en.subject);
-    if (!map.has(k)) map.set(k, { kind: '교과 세특', cls: '', name: en.subject, norm: k, classes: new Set(), writers: new Set() });
-    const m = map.get(k);
-    if (st.classCode) m.classes.add(st.classCode);
-    m.writers.add(st.sid || st.classCode + '|' + st.num);
+    const cc = st.classCode || '?';
+    const k = NEISCheck.normSubject(en.subject) + '|' + cc;
+    if (!map.has(k)) map.set(k, { kind: '교과 세특', cls: '', name: en.subject, norm: NEISCheck.normSubject(en.subject), classes: new Set(cc === '?' ? [] : [cc]), writers: new Set() });
+    map.get(k).writers.add(st.sid || cc + '|' + st.num);
   }
   for (const m of map.values()) mats.push(m);
-  mats.sort((a, b) => a.name.localeCompare(b.name));
-  const ccS = state.students.filter(st => st.entries.some(e => e.type === '창체') || (st.blanks || []).some(b => b.type === '창체'));
-  if (ccS.length) {
-    const areas = new Set();
-    ccS.forEach(st => {
-      st.entries.filter(e => e.type === '창체').forEach(e => areas.add(e.label));
-      (st.blanks || []).filter(b => b.type === '창체').forEach(b => areas.add(b.label));
-    });
+  const ccGroups = new Map();
+  for (const st of state.students) {
+    if (!(st.entries.some(e => e.type === '창체') || (st.blanks || []).some(b => b.type === '창체'))) continue;
+    const cc = st.classCode || '?';
+    if (!ccGroups.has(cc)) ccGroups.set(cc, { studs: [], areas: new Set() });
+    const g = ccGroups.get(cc);
+    g.studs.push(st);
+    st.entries.filter(e => e.type === '창체').forEach(e => g.areas.add(e.label));
+    (st.blanks || []).filter(b => b.type === '창체').forEach(b => g.areas.add(b.label));
+  }
+  for (const [cc, g] of ccGroups) {
     mats.push({ kind: '창의적 체험활동', cls: 'cc', name: '창체영역', norm: '__cc__',
-      classes: new Set(ccS.map(x => x.classCode).filter(Boolean)), writers: new Set(ccS.map(x => x.sid)), areasList: [...areas] });
+      classes: new Set(cc === '?' ? [] : [cc]), writers: new Set(g.studs.map(x => x.sid)), areasList: [...g.areas] });
   }
-  const htS = state.students.filter(st => st.entries.some(e => e.type === '행특') || (st.blanks || []).some(b => b.type === '행특'));
-  if (htS.length) {
+  const htGroups = new Map();
+  for (const st of state.students) {
+    if (!(st.entries.some(e => e.type === '행특') || (st.blanks || []).some(b => b.type === '행특'))) continue;
+    const cc = st.classCode || '?';
+    if (!htGroups.has(cc)) htGroups.set(cc, []);
+    htGroups.get(cc).push(st);
+  }
+  for (const [cc, studs] of htGroups) {
     mats.push({ kind: '행동특성', cls: 'cc', name: '행동특성·종합의견', norm: '__ht__',
-      classes: new Set(htS.map(x => x.classCode).filter(Boolean)), writers: new Set(htS.map(x => x.sid)) });
+      classes: new Set(cc === '?' ? [] : [cc]), writers: new Set(studs.map(x => x.sid)) });
   }
+  // 정렬: 반 → 세특 과목(가나다) → 창체 → 행특
+  const rank = m => m.norm === '__cc__' ? 1 : (m.norm === '__ht__' ? 2 : 0);
+  mats.sort((a, b) => {
+    const ca = [...a.classes][0] || '', cb = [...b.classes][0] || '';
+    return ca.localeCompare(cb) || (rank(a) - rank(b)) || a.name.localeCompare(b.name);
+  });
   for (const m of mats) {
     m.classStuds = state.students.filter(st => m.classes.size === 0 || m.classes.has(st.classCode));
     m.total = m.classStuds.length;
@@ -2164,7 +2180,7 @@ function renderMatDetail(m) {
         sim: m.iss.sim.filter(x => x.a.entry.label === area),
         blanks: m.iss.blanks.filter(x => x.b.label === area),
       };
-      const written = state.students.filter(st => st.entries.some(e => e.type === '창체' && e.label === area)).length;
+      const written = m.classStuds.filter(st => st.entries.some(e => e.type === '창체' && e.label === area)).length;
       const isJinro = area.includes('진로');
       const g12 = [...m.classes].every(cc => +cc[0] <= 2) && m.classes.size > 0;
       html += `<div class="area"><span class="nm">${esc(area)}${isJinro ? `<small>상한 ${g12 ? '1,500' : '2,100'}B</small>` : ''}</span>
