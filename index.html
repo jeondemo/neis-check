@@ -338,6 +338,13 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   .miss-table th, .miss-table td { text-align: left; padding: 9px 14px; font-size: 13px; border-bottom: 1px solid #f4ebe8; }
   .miss-table th { background: #f9f4f2; color: var(--sub); font-size: 12px; }
   .miss-table td.names { color: var(--sub); }
+  /* 섹션 머리 — 악센트 바 + 한 줄 */
+  .shead { display: flex; align-items: baseline; gap: 12px; margin: 26px 0 12px; }
+  .shead .tick { align-self: center; width: 4px; height: 17px; border-radius: 3px; background: linear-gradient(180deg, #a8404e, #c9a45f); flex: none; }
+  .shead h2 { font-size: 16.5px; font-weight: 800; color: #3a2c2c; letter-spacing: -.2px; white-space: nowrap; }
+  .shead .note { font-size: 12px; color: #ab9b9b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .shead .line { flex: 1; height: 1px; background: linear-gradient(90deg, #e5d3cc, transparent); align-self: center; min-width: 40px; }
+  .shead select { font: inherit; font-size: 12.5px; border: 1px solid var(--line); border-radius: 8px; padding: 4px 9px; background: var(--card); color: var(--ink); }
   /* ---- 올린 자료: 다크 글래스 카드 ---- */
   .mats { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; margin-bottom: 26px; }
   .mat2 { border-radius: 20px; padding: 22px 24px 20px; cursor: pointer; position: relative; overflow: hidden; color: #f2dcd8;
@@ -2023,8 +2030,7 @@ function renderDash() {
   const r = state.res;
   let html = '';
   if (state.mats.length) {
-    html += `<div class="section-title" style="margin-top:0">올린 자료</div>
-      <div class="section-note">과목·자료별 현황입니다 — 카드를 누르면 해당 자료의 결과만 모아 볼 수 있습니다</div>
+    html += `<div class="shead" style="margin-top:0"><span class="tick"></span><h2>업로드된 자료</h2><span class="note">카드를 누르면 해당 자료의 결과만 모아 봅니다</span><span class="line"></span></div>
       <div class="mats">` + state.mats.map((m, i) => {
       const classes = [...m.classes].sort().map(fmtClass).join(', ') || '반 미상';
       const meta = m.norm === '__cc__'
@@ -2058,15 +2064,13 @@ function renderDash() {
   ];
   if (missSubj != null) cards.push(['missing', missSubj ? 'amber' : 'green', '미입력 과목', missSubj + '개', missSubj ? '담당 교사 확인 필요' : '모두 입력 완료']);
   if (blankGroups) cards.push(['missing', 'amber', '창체·행특 미작성', blankGroups + '항목', `연인원 ${blankStudents}명`]);
-  html += `<div class="section-title">전체 요약</div>
-    <div class="section-note">올린 자료 전체 기준 — 카드를 누르면 해당 탭으로 이동합니다</div>`;
+  html += `<div class="shead"><span class="tick"></span><h2>전체 요약</h2><span class="note">카드를 누르면 해당 탭으로 이동합니다</span><span class="line"></span></div>`;
   html += '<div class="cards">' + cards.map(([tab, cls, label, val, sub]) =>
     `<div class="card ${cls}" onclick="showTab('${tab}')"><div class="c-label">${label}</div><div class="c-value">${val}</div><div class="c-sub">${sub}</div></div>`).join('') + '</div>';
 
   if (r.missing) {
     const classes = classesOf();
-    html += `<div class="section-title">과목별 입력률 ${classes.length > 1 ? `<select class="class-filter" id="dash-class">${classes.map(c => `<option value="${c}">${fmtClass(c)}</option>`).join('')}</select>` : `<span style="font-weight:600;color:var(--sub)"> · ${fmtClass(classes[0])}</span>`}</div>`;
-    html += `<div class="section-note">막대가 가득 차면 입력 완료 · <b>명단 없음</b> 표시는 수강명단이 확보되지 않아 반 전체 인원 기준으로 집계한 과목</div>`;
+    html += `<div class="shead"><span class="tick"></span><h2>과목별 입력률</h2>${classes.length > 1 ? `<select id="dash-class">${classes.map(c => `<option value="${c}">${fmtClass(c)}</option>`).join('')}</select>` : `<span class="note" style="color:var(--sub);font-weight:700">${fmtClass(classes[0])}</span>`}<span class="note">막대가 가득 차면 입력 완료 · 명단 없음은 반 전체 기준</span><span class="line"></span></div>`;
     html += `<div class="rate-table" id="rate-table"></div>`;
   } else {
     if (state.students.some(st => st.entries.some(e => e.type === '교과'))) html += `<div class="empty"><div class="big">ℹ️</div>세팅데이터 파일(수강명단·교사배정)을 함께 올리면<br>과목별 입력률과 미입력 학생 목록을 볼 수 있습니다.</div>`;
@@ -2088,8 +2092,7 @@ function renderDash() {
     }
     if (ccAgg.size) {
       const rows = [...ccAgg.values()].sort((a, b) => (a.classCode || '').localeCompare(b.classCode || '') || a.area.localeCompare(b.area));
-      html += `<div class="section-title">창체 영역별 작성 현황</div>
-        <div class="section-note">자율·자치 / 동아리 / 진로 영역별 작성 인원 — 내용 작성 여부 기준</div>
+      html += `<div class="shead"><span class="tick"></span><h2>창체 영역별 작성 현황</h2><span class="note">자율·자치 / 동아리 / 진로 — 내용 작성 여부 기준</span><span class="line"></span></div>
         <div class="rate-table">` + rows.map(s => {
         const pct = s.total ? Math.round(s.done / s.total * 100) : 0;
         return `<div class="rate-row">
