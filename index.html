@@ -434,6 +434,35 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     border-radius: 99px; padding: 8px 16px; cursor: pointer; border: 1px solid rgba(217,190,134,.45); color: #d9be86;
     background: rgba(15,4,6,.3); font-family: inherit; }
   .hd.cc .back2 { border-color: rgba(150,220,180,.45); color: #bfe3cf; }
+  /* 학기 아코디언 */
+  .acc { width: 100%; text-align: left; border: none; font-family: inherit; border-radius: 16px; padding: 15px 20px; position: relative;
+    overflow: hidden; color: #f2dcd8; cursor: pointer;
+    background: radial-gradient(140% 150% at 18% -20%, #8a2534 0%, #5c1420 46%, #31090f 100%);
+    box-shadow: 0 8px 20px rgba(60,15,20,.24), inset 0 1px 0 rgba(255,220,190,.1);
+    display: flex; align-items: center; gap: 14px; margin-bottom: 12px; transition: box-shadow .15s; }
+  .acc:hover { box-shadow: 0 12px 26px rgba(60,15,20,.34), inset 0 1px 0 rgba(255,220,190,.14); }
+  .acc::before { content: ''; position: absolute; inset: 0; pointer-events: none;
+    background-image: linear-gradient(rgba(255,255,255,.05) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.05) 1px, transparent 1px);
+    background-size: 36px 36px;
+    -webkit-mask-image: radial-gradient(ellipse 90% 90% at 40% 30%, #000 25%, transparent 85%);
+    mask-image: radial-gradient(ellipse 90% 90% at 40% 30%, #000 25%, transparent 85%); }
+  .acc .abar { position: relative; width: 4px; height: 26px; border-radius: 3px; background: linear-gradient(180deg, #dbb97f, #c9a45f); flex: none; }
+  .acc h3 { position: relative; font-size: 17.5px; font-weight: 800; color: #fdf4f2; white-space: nowrap; }
+  .acc .acnt { position: relative; font-size: 12px; color: #d3aca6; font-weight: 700; white-space: nowrap; }
+  .acc .achx { position: relative; margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; justify-content: flex-end; }
+  .acc .achx span { font-size: 10.5px; font-weight: 700; padding: 3px 11px; border-radius: 99px;
+    background: rgba(15,4,6,.35); border: 1px solid rgba(235,175,165,.25); }
+  .acc .achx .hot { color: #ffb4a8; border-color: rgba(255,140,120,.5); }
+  .acc .achx .warm { color: #f2d492; border-color: rgba(232,182,76,.5); }
+  .acc .achx .ok { color: #8fe3b2; border-color: rgba(53,208,127,.45); }
+  .acc .arr { position: relative; width: 30px; height: 30px; border-radius: 50%; border: 1px solid rgba(217,190,134,.4);
+    display: flex; align-items: center; justify-content: center; color: #d9be86; font-size: 12px; background: rgba(20,5,8,.3); flex: none; }
+  .acc.cc2 { background: radial-gradient(140% 150% at 18% -20%, #38795c 0%, #235340 46%, #0f2b1f 100%); }
+  .acc.cc2 .abar { background: linear-gradient(180deg, #9fd8b8, #c9a45f); }
+  .acc.cc2 .acnt { color: #a9cdbb; }
+  .acc.cc2 .arr { color: #bfe3cf; border-color: rgba(150,220,180,.4); }
+  .acc-body { margin: 2px 0 18px; }
+  .acc-body .mats { margin-bottom: 0; }
   /* 학기 묶음 머리 */
   .ghead { display: flex; align-items: center; gap: 10px; margin: 22px 0 12px; }
   .ghead .gtag { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; font-weight: 800; letter-spacing: 1px;
@@ -1931,6 +1960,7 @@ function stuLabel(st) { return `${st.num}번 ${st.name}`; }
 
 function renderMain() {
   state.matSel = null;
+  state.accOpen = new Set();
   try { history.replaceState({ matSel: null }, ''); } catch (e) {}
   const r = state.res;
   const classes = classesOf();
@@ -2100,28 +2130,41 @@ function renderDash() {
     return 0;
   };
   if (state.mats.length) {
-    html += `<div class="shead" style="margin-top:0"><span class="tick"></span><h2>업로드된 자료</h2><span class="note">카드를 누르면 해당 자료의 결과만 모아 봅니다</span><span class="line"></span></div>`;
+    html += `<div class="shead" style="margin-top:0"><span class="tick"></span><h2>업로드된 자료</h2><span class="note">학기를 누르면 과목 카드가 펼쳐집니다 — 접힌 상태에서도 문제 요약이 보입니다</span><span class="line"></span></div>`;
     const subjIdx = [], cchtIdx = [];
     state.mats.forEach((m, i) => (m.cls === 'cc' ? cchtIdx : subjIdx).push(i));
     const allG3 = subjIdx.length > 0 && subjIdx.every(i => state.mats[i].grade === 3);
-    const ghead = (label, n, green) => `<div class="ghead"><span class="gtag${green ? ' g' : ''}">${label}</span><span class="gcnt">${n}</span><span class="gline"></span></div>`;
+    if (!state.accOpen) state.accOpen = new Set();
+    const groupChips = idxs => {
+      const merged = { f: [], l: [], sty: [], ty: [], sim: [], blanks: [] };
+      idxs.forEach(i => { const x = state.mats[i].iss; Object.keys(merged).forEach(k => merged[k].push(...x[k])); });
+      return matChips(merged);
+    };
+    const accSec = (key, label, cntText, idxs, green) => {
+      const open = state.accOpen.has(key);
+      return `<button class="acc${green ? ' cc2' : ''}" data-g="${key}">
+          <span class="abar"></span><h3>${label}</h3><span class="acnt">${cntText}</span>
+          <span class="achx">${groupChips(idxs)}</span><span class="arr">${open ? '▴' : '▾'}</span>
+        </button>
+        <div class="acc-body" data-gb="${key}"${open ? '' : ' hidden'}>
+          <div class="mats">${idxs.map(i => matCard(state.mats[i], i)).join('')}</div>
+        </div>`;
+    };
     if (subjIdx.length) {
       if (allG3) {
-        html += '<div class="mats">' + subjIdx.map(i => matCard(state.mats[i], i)).join('') + '</div>';
+        html += accSec('g3', '3학년 과목', subjIdx.length + '과목', subjIdx, false);
       } else {
         const g1 = subjIdx.filter(i => semForMat(state.mats[i]) === 1);
         const g2 = subjIdx.filter(i => semForMat(state.mats[i]) === 2);
         const g0 = subjIdx.filter(i => semForMat(state.mats[i]) === 0);
-        for (const [label, idxs] of [['1학기 과목', g1], ['2학기 과목', g2], ['학기 구분 없음', g0]]) {
+        for (const [key, label, idxs] of [['s1', '1학기 과목', g1], ['s2', '2학기 과목', g2], ['s0', '학기 구분 없음', g0]]) {
           if (!idxs.length) continue;
-          html += ghead(label, idxs.length + '과목', false);
-          html += '<div class="mats">' + idxs.map(i => matCard(state.mats[i], i)).join('') + '</div>';
+          html += accSec(key, label, idxs.length + '과목', idxs, false);
         }
       }
     }
     if (cchtIdx.length) {
-      html += ghead('창체 · 행동특성', '반별', true);
-      html += '<div class="mats">' + cchtIdx.map(i => matCard(state.mats[i], i)).join('') + '</div>';
+      html += accSec('cc', '창체 · 행동특성', cchtIdx.length + '개 반', cchtIdx, true);
     }
   }
   const forbid = r.forbidden.filter(f => f.rule.grade === '금지').length;
@@ -2182,6 +2225,13 @@ function renderDash() {
   }
   $('#panel-dash').innerHTML = html;
   document.querySelectorAll('.mat2').forEach(b => b.onclick = () => { state.matSel = +b.dataset.i; try { history.pushState({ matSel: state.matSel }, ''); } catch (e) {} renderDash(); window.scrollTo(0, 0); });
+  document.querySelectorAll('.acc').forEach(b => b.onclick = () => {
+    const key = b.dataset.g;
+    const body = document.querySelector(`.acc-body[data-gb="${key}"]`);
+    const arrow = b.querySelector('.arr');
+    if (state.accOpen.has(key)) { state.accOpen.delete(key); body.hidden = true; arrow.textContent = '▾'; }
+    else { state.accOpen.add(key); body.hidden = false; arrow.textContent = '▴'; }
+  });
   if (r.missing) {
     const sel = $('#dash-class');
     const draw = () => {
