@@ -1863,6 +1863,14 @@ $('#btn-run').onclick = () => {
   renderMain();
 };
 $('#btn-reset').onclick = () => location.reload();
+// 브라우저 뒤로가기: 상세 → 대시보드 카드 목록으로 (창이 닫히지 않게)
+window.addEventListener('popstate', e => {
+  if (!state.res) return;
+  state.matSel = e.state && e.state.matSel != null ? e.state.matSel : null;
+  showTab('dash');
+  renderDash();
+  window.scrollTo(0, 0);
+});
 
 /* ---------- 메인 렌더 ---------- */
 function classesOf() { return [...new Set(state.students.map(s => s.classCode).filter(Boolean))].sort(); }
@@ -1872,6 +1880,7 @@ function stuLabel(st) { return `${st.num}번 ${st.name}`; }
 
 function renderMain() {
   state.matSel = null;
+  try { history.replaceState({ matSel: null }, ''); } catch (e) {}
   const r = state.res;
   const classes = classesOf();
   const kindNames = { setuk: '세특', changche: '창체', haengteuk: '행동특성' };
@@ -2077,7 +2086,7 @@ function renderDash() {
     }
   }
   $('#panel-dash').innerHTML = html;
-  document.querySelectorAll('.mat2').forEach(b => b.onclick = () => { state.matSel = +b.dataset.i; renderDash(); window.scrollTo(0, 0); });
+  document.querySelectorAll('.mat2').forEach(b => b.onclick = () => { state.matSel = +b.dataset.i; try { history.pushState({ matSel: state.matSel }, ''); } catch (e) {} renderDash(); window.scrollTo(0, 0); });
   if (r.missing) {
     const sel = $('#dash-class');
     const draw = () => {
@@ -2194,7 +2203,10 @@ function renderMatDetail(m) {
     html += items.length ? items.join('') : '<div class="empty"><div class="big">✅</div>이 자료에서는 지적 사항이 없습니다.</div>';
   }
   $('#panel-dash').innerHTML = html;
-  $('#mat-back').onclick = () => { state.matSel = null; renderDash(); window.scrollTo(0, 0); };
+  $('#mat-back').onclick = () => {
+    if (history.state && history.state.matSel != null) { history.back(); return; } // popstate가 처리
+    state.matSel = null; renderDash(); window.scrollTo(0, 0);
+  };
   document.querySelectorAll('#panel-dash .mdsim').forEach(el => el.onclick = () => {
     const k = +el.dataset.k, d = document.getElementById('mdsimd-' + k), x = simRefs[k];
     if (d.classList.contains('open')) { d.classList.remove('open'); return; }
