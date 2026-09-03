@@ -427,6 +427,22 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     border-radius: 99px; padding: 8px 16px; cursor: pointer; border: 1px solid rgba(217,190,134,.45); color: #d9be86;
     background: rgba(15,4,6,.3); font-family: inherit; }
   .hd.cc .back2 { border-color: rgba(150,220,180,.45); color: #bfe3cf; }
+  /* 창체 상세 — 영역별 기재 내용 보기 */
+  .view-toggle { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 700;
+    color: #2d6a4f; background: #eef5f1; border: 1px solid #cfe3d8; border-radius: 99px; padding: 6px 14px; cursor: pointer; font-family: inherit; }
+  .view-toggle:hover { background: #e2efe8; }
+  .aview { display: none; }
+  .aview.open { display: block; }
+  .stu-entry { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 16px; margin-bottom: 8px; }
+  .stu-entry .h { display: flex; align-items: center; gap: 12px; }
+  .stu-entry .h b { font-size: 13px; white-space: nowrap; }
+  .sbar { flex: 1; max-width: 320px; height: 8px; border-radius: 99px; background: #f0e6e2; overflow: hidden; }
+  .sbar i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, #2d6a4f, #4dab74); }
+  .sbar i.overb { background: var(--danger); }
+  .stu-entry .h .byt { font-size: 11.5px; color: var(--sub); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .stu-entry .h .st2 { margin-left: auto; font-size: 11px; font-weight: 700; }
+  .stu-entry .h .st2.ok { color: #2f855a; } .stu-entry .h .st2.bad { color: var(--danger); }
+  .stu-entry .t { margin-top: 7px; font-size: 12.5px; color: var(--ink); line-height: 1.7; background: #f9f4f2; border-radius: 8px; padding: 9px 12px; white-space: pre-wrap; }
   /* 분량 합산 게이지 */
   .len-row { cursor: pointer; }
   .lgauge { margin-top: 10px; display: flex; align-items: center; gap: 12px; }
@@ -2172,6 +2188,7 @@ function renderMatDetail(m) {
     }
     return items;
   };
+  const areaViews = {};
   if (m.norm === '__cc__') {
     // 창체: 자율·자치 / 동아리 / 진로 영역별 구획
     const ORDER = ['자율', '동아리', '진로'];
@@ -2197,6 +2214,17 @@ function renderMatDetail(m) {
         <span class="achips">${matChips(sub)}</span></div>`;
       const items = issueItems(sub, false);
       html += items.length ? items.join('') : `<div class="ok-line">✓ ${esc(area)}에서는 지적 사항이 없습니다</div>`;
+      // 기재 내용 보기 (작성 학생별 본문 + 바이트 막대)
+      const writers = m.classStuds
+        .map(st => ({ st, en: st.entries.find(e => e.type === '창체' && e.label === area) }))
+        .filter(x => x.en)
+        .sort((a, b) => (a.st.num || 0) - (b.st.num || 0));
+      if (writers.length) {
+        const aid = 'aview-' + Object.keys(areaViews).length;
+        areaViews[aid] = writers;
+        html += `<div style="margin:2px 0 12px"><button class="view-toggle" data-a="${aid}" data-n="${writers.length}">▸ 기재 내용 보기 (${writers.length}명)</button></div>
+          <div class="aview" id="${aid}"></div>`;
+      }
     }
   } else {
     const items = issueItems(m.iss, m.norm === '__ht__');
@@ -2207,6 +2235,30 @@ function renderMatDetail(m) {
     if (history.state && history.state.matSel != null) { history.back(); return; } // popstate가 처리
     state.matSel = null; renderDash(); window.scrollTo(0, 0);
   };
+  document.querySelectorAll('#panel-dash .view-toggle').forEach(btn => btn.onclick = () => {
+    const d = document.getElementById(btn.dataset.a);
+    if (d.classList.contains('open')) {
+      d.classList.remove('open');
+      btn.textContent = `▸ 기재 내용 보기 (${btn.dataset.n}명)`;
+      return;
+    }
+    if (!d.innerHTML) {
+      d.innerHTML = areaViews[btn.dataset.a].map(({ st, en }) => {
+        const cap = NEISCheck.limitFor(en, st.grade);
+        const pct = Math.min(100, en.bytes / cap * 100);
+        const over = en.bytes > cap;
+        return `<div class="stu-entry">
+          <div class="h"><b>${stuLabel(st)}</b>
+            <span class="sbar"><i class="${over ? 'overb' : ''}" style="width:${pct.toFixed(1)}%"></i></span>
+            <span class="byt">${en.bytes.toLocaleString()} / ${cap.toLocaleString()}B</span>
+            <span class="st2 ${over ? 'bad' : 'ok'}">${over ? (en.bytes - cap).toLocaleString() + 'B 초과' : '✓'}</span></div>
+          <div class="t">${esc(en.body)}</div>
+        </div>`;
+      }).join('');
+    }
+    d.classList.add('open');
+    btn.textContent = `▾ 기재 내용 접기 (${btn.dataset.n}명)`;
+  });
   document.querySelectorAll('#panel-dash .mdsim').forEach(el => el.onclick = () => {
     const k = +el.dataset.k, d = document.getElementById('mdsimd-' + k), x = simRefs[k];
     if (d.classList.contains('open')) { d.classList.remove('open'); return; }
