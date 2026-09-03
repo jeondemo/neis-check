@@ -2216,7 +2216,21 @@ function renderMatDetail(m) {
         <span class="cnt">작성 ${written}/${m.total}명</span>
         <span class="achips">${matChips(sub)}</span></div>`;
       const items = issueItems(sub, false);
-      html += items.length ? items.join('') : `<div class="ok-line">✓ ${esc(area)}에서는 지적 사항이 없습니다</div>`;
+      let simNote = '';
+      if (!items.length) {
+        // 지적이 없을 때: 반 내 최고 유사도까지 함께 안내 (기준 35% 미만이면 양호)
+        const ws = m.classStuds.map(st => st.entries.find(e => e.type === '창체' && e.label === area)).filter(Boolean);
+        if (ws.length >= 2) {
+          const tgs = ws.map(en => NEISCheck.trigrams(NEISCheck.normText(en.body)));
+          let mx = 0;
+          for (let i2 = 0; i2 < tgs.length; i2++) for (let j2 = i2 + 1; j2 < tgs.length; j2++) {
+            const v = NEISCheck.jaccard(tgs[i2], tgs[j2]);
+            if (v > mx) mx = v;
+          }
+          simNote = ` · 학생 간 최고 유사도 ${(mx * 100).toFixed(0)}%로 양호합니다`;
+        }
+      }
+      html += items.length ? items.join('') : `<div class="ok-line">✓ ${esc(area)}에서는 지적 사항이 없습니다${simNote}</div>`;
       // 기재 내용 보기 (작성 학생별 본문 + 바이트 막대)
       const writers = m.classStuds
         .map(st => ({ st, en: st.entries.find(e => e.type === '창체' && e.label === area) }))
