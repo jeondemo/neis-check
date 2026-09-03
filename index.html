@@ -2061,8 +2061,16 @@ function buildMats() {
   };
   const semCache = {};
   // 편제에 없는 과목(전학생 전적교 세특 등)은 같은 계열의 편제 과목으로 흡수
+  const FOLD_SYN = [['스포츠', '체육']]; // 전적교 과목명 계열 보강 매칭 (예: 스포츠 개론 → 체육)
   const findFoldTarget = (grade, norm) => {
     const cands = setSubj.filter(x => x.grade === grade && baseOf(x.norm).length >= 2 && norm.includes(baseOf(x.norm)));
+    for (const [kw, base] of FOLD_SYN) {
+      if (norm.includes(kw)) {
+        for (const x of setSubj) {
+          if (x.grade === grade && baseOf(x.norm) === base && !cands.includes(x)) cands.push(x);
+        }
+      }
+    }
     if (!cands.length) return null;
     if (!(grade in semCache)) semCache[grade] = dataSem(grade);
     const ds = semCache[grade];
