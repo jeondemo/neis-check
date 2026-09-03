@@ -899,7 +899,7 @@ const NEISCheck = (() => {
       }
       const nc = texts.map(t => t.replace(/\s/g, ''));
       const h1n = nc.findIndex(t => t === '번호'), h1m = nc.findIndex(t => t === '성명');
-      if (h1n !== -1 && h1m !== -1) { cols = { ...(cols || {}), numCol: h1n, nameCol: h1m }; continue; }
+      if (h1n !== -1 && h1m !== -1) { cols = { ...(cols || {}), numCol: h1n, nameCol: h1m, gradeCol: nc.findIndex(t => t === '학년') }; continue; }
       const h2a = nc.findIndex(t => t === '영역'), h2b = nc.findIndex(t => t === '특기사항');
       if (h2a !== -1 && h2b !== -1) {
         cols = { ...(cols || {}), areaCol: h2a, hourCol: nc.findIndex(t => t === '시간'), bodyCol: h2b };
@@ -923,9 +923,16 @@ const NEISCheck = (() => {
       }
       if (!curKey) continue;
       const rec = map.get(curKey);
+      // 기록 학년(연도) 열: 파일에는 지난 학년도 기록도 함께 실려 있고, 학년 전환이 번호 없는 행에서도 일어남
+      // → 어떤 행이든 학년 칸에 값이 있으면 그 시점부터 해당 학년 기록으로 취급
+      if (cols.gradeCol != null && cols.gradeCol !== -1) {
+        const gy = parseFloat(cellStr(row[cols.gradeCol]));
+        if (Number.isFinite(gy)) rec.curYear = gy;
+      }
+      const yr = rec.curYear != null ? rec.curYear : 0;
       if (area) {
-        curArea = area;
-        if (!rec.areas.has(curArea)) rec.areas.set(curArea, { hours: 0, body: '' });
+        curArea = yr + '|' + area;
+        if (!rec.areas.has(curArea)) rec.areas.set(curArea, { year: yr, name: area, hours: 0, body: '' });
         if (Number.isFinite(hour)) rec.areas.get(curArea).hours = Math.max(rec.areas.get(curArea).hours, hour);
       }
       if (!curArea) continue;
@@ -943,7 +950,12 @@ const NEISCheck = (() => {
     for (const key of order) {
       const rec = map.get(key);
       const entries = [], blanks = [];
-      for (const [areaName, a] of rec.areas) {
+      // 최신 학년(올해) 기록만 검사 — 지난 학년도 기록은 확정분이라 제외
+      let maxYear = 0;
+      for (const a of rec.areas.values()) if (a.year > maxYear) maxYear = a.year;
+      for (const a of rec.areas.values()) {
+        if (a.year !== maxYear) continue;
+        const areaName = a.name;
         const b = a.body.trim();
         if (b) entries.push({ type: '창체', subject: areaName, label: areaName, body: b, bytes: neisBytes(b), hours: a.hours });
         else if (a.hours > 0) blanks.push({ type: '창체', label: areaName, hours: a.hours });
