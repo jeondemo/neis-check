@@ -2203,6 +2203,13 @@ function buildMats() {
     m.classStuds = state.students.filter(st => m.classes.size === 0 || m.classes.has(st.classCode));
     m.total = m.classStuds.length;
     m.iss = matIssues(m);
+    // 담당교사 보강: 기록의 과목명이 편제와 달라(전적교 기록 흡수 등) 주석이 안 붙은 카드도 편제에서 직접 교사를 가져옴
+    if (m.kind === '교과 세특' && m.grade != null && state.setting && state.setting.teachers) {
+      for (const t of state.setting.teachers) {
+        if (t.grade === m.grade && t.norm === m.norm && (!t.classes.length || !m.classes.size || [...m.classes].some(c => t.classes.includes(c))))
+          m.teachers.add(t.teacher);
+      }
+    }
   }
   return mats;
 }
@@ -2560,6 +2567,11 @@ function renderMatDetail(m) {
       const clsTotal = state.students.filter(inCls).length;
       const tset = new Set();
       writers.forEach(({ en }) => en.teacher && String(en.teacher).split(',').forEach(t => { t = t.trim(); if (t) tset.add(t); }));
+      if (!tset.size && state.setting && state.setting.teachers) { // 흡수된 기록 등으로 주석이 없으면 편제에서 보강
+        for (const t of state.setting.teachers) {
+          if (t.grade === m.grade && t.norm === m.norm && (!t.classes.length || t.classes.includes(cc))) tset.add(t.teacher);
+        }
+      }
       html += `<div class="clsbar"><span class="nm">${fmtClass(cc)}</span>
         <span class="cnt">작성 ${writers.length}/${clsTotal}명${tset.size ? ' · ' + esc([...tset].join(', ')) + ' 선생님' : ''}</span>
         <span class="achips">${matChips(sub)}</span></div>`;
