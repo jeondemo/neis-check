@@ -480,12 +480,14 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   .acc .achx .hot { color: #ffb4a8; border-color: rgba(255,140,120,.5); }
   .acc .achx .warm { color: #f2d492; border-color: rgba(232,182,76,.5); }
   .acc .achx .ok { color: #8fe3b2; border-color: rgba(53,208,127,.45); }
-  .acc .arr { position: relative; width: 30px; height: 30px; border-radius: 50%; border: 1px solid rgba(217,190,134,.4);
-    display: flex; align-items: center; justify-content: center; color: #d9be86; font-size: 12px; background: rgba(20,5,8,.3); flex: none; }
+  .acc .chev { position: relative; flex: none; width: 24px; height: 24px; border-radius: 8px; display: flex; align-items: center;
+    justify-content: center; color: #e8cfa0; background: rgba(217,190,134,.14); border: 1px solid rgba(217,190,134,.4); }
+  .acc .chev svg { width: 12px; height: 12px; transition: transform .2s; }
+  .acc.open .chev svg { transform: rotate(90deg); }
   .acc.cc2 { background: radial-gradient(140% 150% at 18% -20%, #38795c 0%, #235340 46%, #0f2b1f 100%); }
   .acc.cc2 .abar { background: linear-gradient(180deg, #9fd8b8, #c9a45f); }
   .acc.cc2 .acnt { color: #a9cdbb; }
-  .acc.cc2 .arr { color: #bfe3cf; border-color: rgba(150,220,180,.4); }
+  .acc.cc2 .chev { color: #bfe3cf; background: rgba(150,220,180,.12); border-color: rgba(150,220,180,.4); }
   .acc-body { margin: 2px 0 18px; }
   .acc-body .mats { margin-bottom: 0; }
   /* 학기 묶음 머리 */
@@ -2276,9 +2278,10 @@ function renderDash() {
     };
     const accSec = (key, label, cntText, idxs, green) => {
       const open = state.accOpen.has(key);
-      return `<button class="acc${green ? ' cc2' : ''}" data-g="${key}">
-          <span class="abar"></span><h3>${label}</h3><span class="acnt">${cntText}</span>
-          <span class="achx">${groupChips(idxs)}</span><span class="arr">${open ? '▴' : '▾'}</span>
+      return `<button class="acc${green ? ' cc2' : ''}${open ? ' open' : ''}" data-g="${key}">
+          <span class="chev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg></span>
+          <h3>${label}</h3><span class="acnt">${cntText}</span>
+          <span class="achx">${groupChips(idxs)}</span>
         </button>
         <div class="acc-body" data-gb="${key}"${open ? '' : ' hidden'}>
           <div class="mats">${(() => {
@@ -2368,9 +2371,8 @@ function renderDash() {
   document.querySelectorAll('.acc').forEach(b => b.onclick = () => {
     const key = b.dataset.g;
     const body = document.querySelector(`.acc-body[data-gb="${key}"]`);
-    const arrow = b.querySelector('.arr');
-    if (state.accOpen.has(key)) { state.accOpen.delete(key); body.hidden = true; arrow.textContent = '▾'; }
-    else { state.accOpen.add(key); body.hidden = false; arrow.textContent = '▴'; }
+    if (state.accOpen.has(key)) { state.accOpen.delete(key); body.hidden = true; b.classList.remove('open'); }
+    else { state.accOpen.add(key); body.hidden = false; b.classList.add('open'); }
   });
   if (r.missing) {
     const sel = $('#dash-class');
