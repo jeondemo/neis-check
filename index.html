@@ -156,6 +156,12 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   .inv-row .meta { font-size: 11px; color: #ba8f92; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .inv-row .when { font-size: 10.5px; color: #ba8f92; white-space: nowrap; flex: none; }
   .inv-row .del { border: none; background: none; color: #ba8f92; cursor: pointer; font-size: 10.5px; padding: 0; text-decoration: underline; font-family: inherit; }
+  /* 방금 저장된 항목 — 금색 글로우 후 서서히 평소 모습으로 */
+  .inv-row.fresh { border-color: rgba(219,185,127,.75); background: rgba(70,45,18,.4);
+    box-shadow: 0 0 0 1px rgba(219,185,127,.35), 0 0 18px rgba(219,185,127,.28); animation: freshfade 4s ease 1.2s forwards; }
+  @keyframes freshfade { to { border-color: rgba(235,175,165,.16); background: rgba(45,10,16,.55); box-shadow: none; } }
+  .inv-row .newtag { flex: none; font-size: 9.5px; font-weight: 800; letter-spacing: 1px; color: #3d1016; border-radius: 99px;
+    padding: 2.5px 9px; background: linear-gradient(140deg, #e8cfa0, #c9a45f); }
   .inv-empty { padding: 10px 8px 4px; text-align: center; color: #e0c4c0; font-size: 12.5px; line-height: 1.7; }
   .inv-empty b { color: #7fe3ab; font-weight: 700; }
   .inv-empty span { color: #ba8f92; font-size: 11.5px; }
@@ -1898,13 +1904,17 @@ function parseSettingSource(kind, name, sheets) {
   if (kind === 'roster') return NEISCheck.parseRosterMatrix(sheets);
   return NEISCheck.parseTeacherList(sheets, semFromName(name));
 }
+const freshIds = new Set(); // 방금 저장된 항목 강조용
 function addSettingSource(name, kind, sheets) {
   const data = parseSettingSource(kind, name, sheets);
   if (!data || !data.ok) { $('#set-msg').textContent = `'${name}': 세팅 정보를 읽지 못했습니다`; return; }
   setSources = setSources.filter(s => s.name !== name); // 같은 파일명 재업로드 시 교체
-  setSources.push({ id: Date.now() + Math.random().toString(36).slice(2, 6), name, kind, sem: semFromName(name), when: Date.now(), data });
+  const id = Date.now() + Math.random().toString(36).slice(2, 6);
+  setSources.push({ id, name, kind, sem: semFromName(name), when: Date.now(), data });
+  freshIds.add(String(id));
   saveSources();
   renderInv();
+  setTimeout(() => { freshIds.clear(); renderInv(); }, 6500);
 }
 function mergedSetting() {
   // 세팅데이터 → 담당과목표 → 수강명단 순서로 병합 (명단이 마지막이어야 '대기'가 '명단'으로 승격)
@@ -1943,9 +1953,10 @@ function renderInv() {
   const ic = { setting: '🗂', roster: '🧑‍🎓', teacherlist: '📋' };
   $('#set-inv').innerHTML = setSources.map(s => {
     const d = new Date(s.when);
-    return `<div class="inv-row">
+    const fresh = freshIds.has(String(s.id));
+    return `<div class="inv-row${fresh ? ' fresh' : ''}">
       <span class="inv-ic">${ic[s.kind] || '🗂'}</span>
-      <b>${esc(invLabel(s))}</b>
+      <b>${esc(invLabel(s))}</b>${fresh ? '<span class="newtag">방금 저장</span>' : ''}
       <span class="meta">${invSummary(s)}</span>
       <span class="when">${d.getMonth() + 1}/${d.getDate()} 저장</span>
       <button class="del" data-id="${s.id}">삭제</button>
